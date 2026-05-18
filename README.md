@@ -16,6 +16,7 @@ La función no representa un modelo clínico validado. Solo simula el comportami
 | `ENFERMEDAD LEVE` | Crisis leve. Manejo ambulatorio con analgesia e hidratación oral. |
 | `ENFERMEDAD AGUDA` | Crisis moderada. Observación hospitalaria, analgesia IV e hidratación. |
 | `ENFERMEDAD CRÓNICA` | Crisis grave / Síndrome Torácico Agudo. Hospitalización urgente. |
+| `ENFERMEDAD TERMINAL` | Riesgo vital inminente. Atención crítica inmediata. |
 
 ## Variables de entrada
 
@@ -30,6 +31,7 @@ La función no representa un modelo clínico validado. Solo simula el comportami
 
 ## Reglas simuladas de predicción
 
+- `SpO₂ < 85` **o** `FR > 40` **o** `Hb < 4` → `ENFERMEDAD TERMINAL` (riesgo vital)
 - `SpO₂ < 90` **o** `FR > 30` **o** `Hb < 5` → `ENFERMEDAD CRÓNICA` (crisis grave / STA)
 - `SpO₂ < 94` **o** `dolor ≥ 8` **o** `Hb < 7` → `ENFERMEDAD AGUDA` (crisis moderada)
 - `dolor ≥ 4` **o** `fiebre ≥ 38.5` **o** `crisis_previas ≥ 3` → `ENFERMEDAD LEVE` (crisis leve)
@@ -113,7 +115,21 @@ Respuesta esperada:
 }
 ```
 
-## Ejemplos para probar los cuatro estados
+## Cómo obtener reporte de predicciones
+
+El reporte se obtiene con un GET al endpoint:
+
+```text
+http://localhost:5000/reporte
+```
+
+La respuesta incluye:
+
+- Total de predicciones por categoría.
+- Últimas 5 predicciones.
+- Fecha de la última predicción.
+
+## Ejemplos para probar los cinco estados
 
 ### NO ENFERMO — sin crisis activa
 
@@ -139,44 +155,12 @@ Respuesta esperada:
 {"spo2":87,"dolor":9,"hemoglobina":4.5,"fiebre":39.2,"frecuencia_respiratoria":34,"crisis_previas_6m":5}
 ```
 
-## Nota ética y clínica
-
-Esta solución es únicamente académica. En un escenario real se requeriría validación clínica, revisión de sesgos, protección de datos personales conforme a la normativa colombiana (Ley 1581), seguridad, trazabilidad y monitoreo continuo del desempeño del modelo.
-    "fiebre": 38.2,
-    "dolor": 5,
-    "duracion_dias": 4,
-    "perdida_peso": false
-  },
-  "resultado": "ENFERMEDAD LEVE"
-}
-```
-
-## Ejemplos para probar todos los estados
-
-### NO ENFERMO
+### ENFERMEDAD TERMINAL — riesgo vital
 
 ```json
-{"fiebre":36.5,"dolor":1,"duracion_dias":1,"perdida_peso":false}
-```
-
-### ENFERMEDAD LEVE
-
-```json
-{"fiebre":38.0,"dolor":4,"duracion_dias":3,"perdida_peso":false}
-```
-
-### ENFERMEDAD AGUDA
-
-```json
-{"fiebre":39.2,"dolor":8,"duracion_dias":2,"perdida_peso":false}
-```
-
-### ENFERMEDAD CRÓNICA
-
-```json
-{"fiebre":37.0,"dolor":3,"duracion_dias":35,"perdida_peso":true}
+{"spo2":82,"dolor":9,"hemoglobina":3.6,"fiebre":39.8,"frecuencia_respiratoria":42,"crisis_previas_6m":6}
 ```
 
 ## Nota ética y clínica
 
-Esta solución es únicamente académica. En un escenario real se requeriría validación clínica, revisión de sesgos, protección de datos personales, seguridad, trazabilidad y monitoreo continuo del desempeño del modelo.
+Esta solución es únicamente académica. En un escenario real se requeriría validación clínica, revisión de sesgos, protección de datos personales conforme a la normativa colombiana (Ley 1581), seguridad, trazabilidad y monitoreo continuo del desempeño del modelo.

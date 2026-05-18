@@ -1,3 +1,8 @@
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
@@ -7,7 +12,58 @@ INTERPRETACIONES = {
     "ENFERMEDAD LEVE": "Crisis leve. Manejo ambulatorio con analgesia e hidratación oral.",
     "ENFERMEDAD AGUDA": "Crisis moderada. Observación hospitalaria, analgesia IV e hidratación.",
     "ENFERMEDAD CRÓNICA": "Crisis grave / Síndrome Torácico Agudo. Hospitalización urgente.",
+    "ENFERMEDAD TERMINAL": "Riesgo vital inminente. Atención crítica inmediata.",
 }
+
+def _stats_file() -> Path:
+    return Path(os.environ.get("PREDICTION_STATS_PATH", "predicciones.jsonl"))
+
+
+def registrar_prediccion(entrada: dict, resultado: str) -> None:
+    stats_file = _stats_file()
+    stats_file.parent.mkdir(parents=True, exist_ok=True)
+    evento = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "entrada": entrada,
+        "resultado": resultado,
+    }
+    with stats_file.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(evento, ensure_ascii=False) + "\n")
+
+
+def leer_predicciones() -> list[dict]:
+    stats_file = _stats_file()
+    if not stats_file.exists():
+        return []
+    predicciones = []
+    with stats_file.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                predicciones.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return predicciones
+
+
+def construir_reporte() -> dict:
+    predicciones = leer_predicciones()
+    totales = {categoria: 0 for categoria in INTERPRETACIONES}
+    for pred in predicciones:
+        categoria = pred.get("resultado")
+        if categoria in totales:
+            totales[categoria] += 1
+
+    ultimas = predicciones[-5:]
+    fecha_ultima = ultimas[-1]["timestamp"] if ultimas else None
+
+    return {
+        "total_por_categoria": totales,
+        "ultimas_5": ultimas,
+        "fecha_ultima_prediccion": fecha_ultima,
+    }
 
 
 def predecir_crisis(spo2: float, dolor: int, hemoglobina: float,
@@ -31,6 +87,9 @@ def predecir_crisis(spo2: float, dolor: int, hemoglobina: float,
     - ENFERMEDAD AGUDA        → crisis moderada, observación hospitalaria
     - ENFERMEDAD CRÓNICA      → crisis grave / síndrome torácico agudo
     """
+    # Riesgo vital extremo
+    if spo2 < 85 or frecuencia_respiratoria > 40 or hemoglobina < 4:
+        return "ENFERMEDAD TERMINAL"
     # Crisis grave o síndrome torácico agudo
     if spo2 < 90 or frecuencia_respiratoria > 30 or hemoglobina < 5:
         return "ENFERMEDAD CRÓNICA"
@@ -67,6 +126,15 @@ def predecir():
                                     frecuencia_respiratoria, crisis_previas_6m)
         interpretacion = INTERPRETACIONES[resultado]
 
+        registrar_prediccion({
+            "spo2": spo2,
+            "dolor": dolor,
+            "hemoglobina": hemoglobina,
+            "fiebre": fiebre,
+            "frecuencia_respiratoria": frecuencia_respiratoria,
+            "crisis_previas_6m": crisis_previas_6m,
+        }, resultado)
+
         if request.is_json:
             return jsonify({
                 "entrada": {
@@ -94,6 +162,11 @@ def predecir():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/reporte", methods=["GET"])
+def reporte():
+    return jsonify(construir_reporte())
 
 
 if __name__ == "__main__":
